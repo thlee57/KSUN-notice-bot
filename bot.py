@@ -7,7 +7,7 @@ import os
 
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from aiohttp import web
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     Application, 
@@ -207,28 +207,18 @@ def get_latest_notice(url, selector):
         logger.error(f"크롤링 오류 ({url}): {e}")
         return None, None
     
-# 핸들러 & 서버 시작 함수
-class _HealthHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        if self.path in ("/", "/health"):
-            self.send_response(200)
-            self.send_header("Content-Type", "text/plain; charset=utf-8")
-            self.end_headers()
-            self.wfile.write(b"ok")
-        else:
-            self.send_response(404)
-            self.end_headers()
+async def handle_health(request):
+    return web.Response(text="ok")
 
-    # 불필요한 로그 억제 (선택)
-    def log_message(self, format, *args):
-        return
-
-def start_health_server():
+async def run_health_server():
+    app = web.Application()
+    app.router.add_get("/", handle_health)
+    app.router.add_get("/health", handle_health)
     port = int(os.getenv("PORT", "8080"))
-    server = HTTPServer(("0.0.0.0", port), _HealthHandler)
-    t = threading.Thread(target=server.serve_forever, daemon=True)
-    t.start()
-
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
 
 # 텔레그램 명령어 처리 함수
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -888,5 +878,5 @@ def main():
 
 
 if __name__ == "__main__":
-    start_health_server()
+    asyncio.get_event_loop().create_task(run_health_server())
     main()
